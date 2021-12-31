@@ -11,16 +11,22 @@ import torch.nn as nn
 import time
 import matplotlib.pyplot as plt
 import numpy as np
+import os
+# import tensorflow as tf
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+# config = tf.ConfigProto()
+# config.gpu_options.per_process_gpu_memory_fraction = 0.3
+# set_session(tf.Session(config=config))
 
-
-# 转换函数，将数据转换到tensor，再归一化使其服从（0.5， 0.5）的正态分布
+# 转换函数：将数据转换到tensor类型，再归一化使其服从（0.5， 0.5）的正态分布
 def get_trans():
     # torchvision.transforms:常用的图片变换，例如裁剪、旋转等
-    # torchvision.transforms.Compose：主要作用是串联多个图片变换的操作，此处就是串联改变数据类型和标准化这两个操作
+    # torchvision.transforms.Compose：主要作用是串联多个图片变换的操作
     trans = torchvision.transforms.Compose(
         [
-            # Convert a ``PIL Image`` or ``numpy.ndarray`` to tensor（张量）
+            # 改变数据类型
             torchvision.transforms.ToTensor(),
+            # 数据标准化
             torchvision.transforms.Normalize([0.5], [0.5])
         ]
     )
@@ -116,9 +122,9 @@ class CNN(nn.Module):
 
 
 # 定义常量
-EPOCH = 1000                              # 总的训练次数，即迭代次数
-BATCH_SIZE = 64                         # 批次的大小，即一次训练选取的样本数量
-LR = 1                                # 学习率
+EPOCH = 10                              # 总的训练次数，即迭代次数
+BATCH_SIZE = 64                         # 一批数据的规模，即一次训练选取的样本数量
+LR = 0.01                                # 学习率
 DOWNLOAD_MNIST = False                  # 运行代码时不需要下载数据集
 # 实例化卷积神经网络
 cnn = CNN()
@@ -137,8 +143,10 @@ train_loader = get_trainloader(BATCH_SIZE)
 test_loader = get_testloader(BATCH_SIZE)
 # 进行训练和测试
 acc = []
+train_loss = []
 for i in range(4):
-    optimizer1 = torch.optim.Adam(cnn.parameters(), lr=LR/10**(i+1))
+    # 获取不同学习率的模型
+    optimizer_lr = torch.optim.Adam(cnn.parameters(), lr=LR/10**(i+1))
     for ep in range(EPOCH):
         startTick = time.perf_counter()
         # 训练过程
@@ -150,18 +158,19 @@ for i in range(4):
             out = cnn(img)
             # 得到误差
             loss = loss_function(out, label)
+            train_loss.append(loss)
             # print("误差：", loss)
             # 梯度归零
-            optimizer1.zero_grad()
+            optimizer_lr.zero_grad()
             # optimizer2.zero_grad()
             # 反向传播误差，但是参数还没更新
             loss.backward()
             # 更新模型参数
-            optimizer1.step()
+            optimizer_lr.step()
             # optimizer2.step()
-        # 预测正确样例数量
-        num_correct = 0
         # 测试过程
+        num_correct = 0
+        # 预测正确样例数量
         for data in test_loader:
             img, label = data
             if cuda_available:
@@ -177,19 +186,24 @@ for i in range(4):
         accuracy = format(num_correct.cpu().numpy()/get_test_data_len(), '0.4f')
         acc.append(float(accuracy))
         timeSpan = time.perf_counter() - startTick
-        print("迭代次数：", ep+1, "精度：", accuracy, "耗时：", timeSpan)
-    print(acc)
+        # print("迭代次数：", ep+1, "精度：", accuracy, "耗时：", timeSpan)
+        print("迭代次数：", ep + 1, "耗时：", timeSpan)
+    # print(acc)
 # 绘制图像：不同学习率下的精度
 plt.rcParams['font.sans-serif'] = ['SimHei']
 plt.rcParams['axes.unicode_minus'] = False
-plt.plot(np.arange(0, 1000, 1), acc[0: 1000], color='red', label="0.1")
-plt.plot(np.arange(0, 1000, 1), acc[1000: 2000], color='green', label="0.01")
-plt.plot(np.arange(0, 1000, 1), acc[2000: 3000], color='blue', label="0.001")
-plt.plot(np.arange(0, 1000, 1), acc[3000: 4000], color='yellow', label="0.0001")
+plt.plot(np.arange(1, 11, 1), train_loss[0: 10], color='red', label="学习率=0.1")
+plt.plot(np.arange(1, 11, 1), train_loss[10: 20], color='green', label="学习率=0.01")
+plt.plot(np.arange(1, 11, 1), train_loss[20: 30], color='blue', label="学习率=0.001")
+plt.plot(np.arange(1, 11, 1), train_loss[30: 40], color='yellow', label="学习率=0.0001")
+# plt.plot(np.arange(0, 10, 1), acc[0: 10], color='red', label="0.1")
+# plt.plot(np.arange(0, 10, 1), acc[10: 20], color='green', label="0.01")
+# plt.plot(np.arange(0, 10, 1), acc[20: 30], color='blue', label="0.001")
+# plt.plot(np.arange(0, 10, 1), acc[30: 40], color='yellow', label="0.0001")
 plt.xlabel("迭代次数")
-plt.ylabel("精度")
-plt.xticks(np.arange(1, 1000, 1))
+plt.ylabel("训练损失值")
+plt.xticks(np.arange(1, 11, 1))
 plt.grid(b=True, linestyle='--')
-plt.legend(loc='upper left')
-plt.savefig('CNN_learning_rate.svg')
+plt.legend(loc='upper right')
+plt.savefig('CNN_mnist_learning_rate.svg')
 plt.show()
