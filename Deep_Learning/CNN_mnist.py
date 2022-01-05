@@ -12,11 +12,10 @@ import time
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-# import tensorflow as tf
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-# config = tf.ConfigProto()
-# config.gpu_options.per_process_gpu_memory_fraction = 0.3
-# set_session(tf.Session(config=config))
+
+
+
 
 # 转换函数：将数据转换到tensor类型，再归一化使其服从（0.5， 0.5）的正态分布
 def get_trans():
@@ -79,10 +78,10 @@ class CNN(nn.Module):
         self.conv1 = nn.Sequential(
             nn.Conv2d(              # 对输入数据进行二维卷积
                 in_channels=1,      # 输入数据的通道数，例如RGB图片通道数为3，灰度图通道为1
-                out_channels=16,    # 卷积产生的数据的通道数
-                kernel_size=5,      # 卷积核大小，此处为5*5
+                out_channels=16,    # 通道数，即卷积核数量
+                kernel_size=5,      # 卷积核大小，此处为5*5，（m,n）表示m*n的卷积核，如果高宽相同，可以使用一个数字代替
                 stride=1,           # 步长：每次卷积核滑动的行数或者列数
-                padding=2           # 填充，数值=(卷积核-步长)/2    ？？？
+                padding=2           # 选择填充，数值=(卷积核-1)/2，前提是stride=1；选择不填充，则padding=0
             ),
             # 经过卷积操作后，得到16*28*28的特征图（feature map），
             # 28 =（28+4-5）/1+1 即 （维数 + 2*padding - kernel_size）/stride +1
@@ -91,7 +90,9 @@ class CNN(nn.Module):
         )
         # 池化层1：提取重要特征信息，同时去掉不重要的信息，减少计算开销
         self.pool1 = nn.Sequential(
-            nn.MaxPool2d(kernel_size=2)         # 最大池化函数，池化核为2*2
+            nn.MaxPool2d(
+                kernel_size=2,      # 使用最大池化，池化核为2*2
+                stride=2)           # stride的默认值为池化核的值
             # w = (w - kernel_size)/stride +1     注意计算若不整除，则结果向上取整，stride 池化核默认为1
             # 经过池化操作，输出的规模为16*14*14，（28-2）/2 +1
         )
@@ -103,14 +104,17 @@ class CNN(nn.Module):
         )
         # 池化层2
         self.pool2 = nn.Sequential(
-            nn.MaxPool2d(kernel_size=2)
+            nn.MaxPool2d(
+                kernel_size=2,
+                stride=2)
             # 经过池化操作，输出的规模为32*7*7
         )
-        # 全连接层：上层的输出是本层的输入，即为32*7*7，设置输出规模为10维，表示分类有10标签，分别对应1-10个数字
+        # 全连接层：上层的输出是本层的输入，即输入数据为32*7*7，设置输出规模为10维，表示分类有10标签，分别对应1-10个数字
         # 全连接层是分类器角色，将特征映射到样本标记空间，本质是矩阵变换
         self.full_connected = nn.Linear(in_features=32*7*7, out_features=10)            # 对输入数据进行线性转换
+
     # 定义向前传播过程，过程名字不可更改，因为这是重写父类的方法
-    def forward(self,x):
+    def forward(self, x):
         x = self.conv1(x)
         x = self.pool1(x)
         x = self.conv2(x)
@@ -134,7 +138,7 @@ if cuda_available==True:
     cnn.cuda()
 # 选择torch.optim.Adam作为模型参数的和优化函数，此外还有 SGD ，AdaGrad ，RMSProp等
 # 实验表明，优化函数为SGD的模型迭代10次后平均精度为0.9875，优化函数为Adam的模型迭代10次后平均精度为0.9469
-optimizer1 = torch.optim.Adam(cnn.parameters(), lr=LR)
+optimizer1 = torch.optim.SGD(cnn.parameters(), lr=LR)
 # optimizer2 = torch.optim.SGD(cnn.parameters(), lr=LR)
 # 损失函数选择交叉熵函数
 loss_function = nn.CrossEntropyLoss()
@@ -144,9 +148,10 @@ test_loader = get_testloader(BATCH_SIZE)
 # 进行训练和测试
 acc = []
 train_loss = []
+test_loss = []
 for i in range(4):
     # 获取不同学习率的模型
-    optimizer_lr = torch.optim.Adam(cnn.parameters(), lr=LR/10**(i+1))
+    optimizer_lr = torch.optim.SGD(cnn.parameters(), lr=LR/10**(i+1))
     for ep in range(EPOCH):
         startTick = time.perf_counter()
         # 训练过程
@@ -178,6 +183,9 @@ for i in range(4):
                 label = label.cuda()
             # 获得输出
             out = cnn(img)
+            # 得到测试误差
+            loss_t = loss_function(out, label)
+            test_loss.append(loss_t.data.item())
             #
             _, prediction = torch.max(out, 1)
             # 预测正确的样本数量
@@ -189,21 +197,183 @@ for i in range(4):
         # print("迭代次数：", ep+1, "精度：", accuracy, "耗时：", timeSpan)
         print("迭代次数：", ep + 1, "耗时：", timeSpan)
     # print(acc)
-# 绘制图像：不同学习率下的精度
+# 绘制图像1：不同学习率对模型性能的影响
 plt.rcParams['font.sans-serif'] = ['SimHei']
 plt.rcParams['axes.unicode_minus'] = False
-plt.plot(np.arange(1, 11, 1), train_loss[0: 10], color='red', label="学习率=0.1")
-plt.plot(np.arange(1, 11, 1), train_loss[10: 20], color='green', label="学习率=0.01")
-plt.plot(np.arange(1, 11, 1), train_loss[20: 30], color='blue', label="学习率=0.001")
-plt.plot(np.arange(1, 11, 1), train_loss[30: 40], color='yellow', label="学习率=0.0001")
-# plt.plot(np.arange(0, 10, 1), acc[0: 10], color='red', label="0.1")
-# plt.plot(np.arange(0, 10, 1), acc[10: 20], color='green', label="0.01")
-# plt.plot(np.arange(0, 10, 1), acc[20: 30], color='blue', label="0.001")
-# plt.plot(np.arange(0, 10, 1), acc[30: 40], color='yellow', label="0.0001")
+plt.subplot(1, 2, 1)
+plt.plot(np.arange(1, 11, 1), test_loss[0: 10], color='red', label="学习率=0.1")
+plt.plot(np.arange(1, 11, 1), test_loss[10: 20], color='green', label="学习率=0.01")
+plt.plot(np.arange(1, 11, 1), test_loss[20: 30], color='blue', label="学习率=0.001")
+plt.plot(np.arange(1, 11, 1), test_loss[30: 40], color='yellow', label="学习率=0.0001")
 plt.xlabel("迭代次数")
-plt.ylabel("训练损失值")
+plt.ylabel("测试损失值")
 plt.xticks(np.arange(1, 11, 1))
 plt.grid(b=True, linestyle='--')
 plt.legend(loc='upper right')
-plt.savefig('CNN_mnist_learning_rate.svg')
+# plt.savefig('CNN_mnist_learning_rate.svg')
+# plt.show()
+
+
+# 绘制图像2：不同卷积核大小对模型性能的影响
+# 设置一个列表，里面存放不同的卷积核大小的CNN模型，模型包含两个卷积层，卷积核数量（通道数）为8，步长为1，选择填充；使用最大池化；一个全连接层
+CNN_kernel_size = []
+# 3*3的卷积核模型
+class CNN_ks3(nn.Module):
+    def __init__(self):
+        super(CNN_ks3, self).__init__()
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(1, 8, 3, 1, 1),
+            nn.ReLU()
+        )
+        self.pool1 = nn.Sequential(
+            nn.MaxPool2d(2, 2)
+        )
+        self.conv2 = nn.Sequential(
+            nn.Conv2d(8, 8, 3, 1, 1),
+            nn.ReLU()
+        )
+        self.pool2 = nn.Sequential(
+            nn.MaxPool2d(kernel_size=2, stride=2)
+        )
+        self.full_connected = nn.Linear(in_features=8*7*7, out_features=10)
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.pool1(x)
+        x = self.conv2(x)
+        x = self.pool2(x)
+        x = x.view(x.size(0), -1)
+        output = self.full_connected(x)
+        return output
+# 5*5的卷积核模型
+class CNN_ks5(nn.Module):
+    def __init__(self):
+        super(CNN_ks5, self).__init__()
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(1, 8, 5, 1, 2),
+            nn.ReLU()
+        )
+        self.pool1 = nn.Sequential(
+            nn.MaxPool2d(kernel_size=2, stride=2)
+        )
+        self.conv2 = nn.Sequential(
+            nn.Conv2d(8, 8, 5, 1, 2),
+            nn.ReLU()
+        )
+        self.pool2 = nn.Sequential(
+            nn.MaxPool2d(kernel_size=2, stride=2)
+        )
+        self.full_connected = nn.Linear(in_features=8*7*7, out_features=10)
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.pool1(x)
+        x = self.conv2(x)
+        x = self.pool2(x)
+        x = x.view(x.size(0), -1)
+        output = self.full_connected(x)
+        return output
+# 7*7的卷积核模型
+class CNN_ks7(nn.Module):
+    def __init__(self):
+        super(CNN_ks7, self).__init__()
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(1, 8, 7, 1, 3),
+            nn.ReLU()
+        )
+        self.pool1 = nn.Sequential(
+            nn.MaxPool2d(kernel_size=2, stride=2)
+        )
+        self.conv2 = nn.Sequential(
+            nn.Conv2d(8, 8, 7, 1, 3),
+            nn.ReLU()
+        )
+        self.pool2 = nn.Sequential(
+            nn.MaxPool2d(kernel_size=2, stride=2)
+        )
+        self.full_connected = nn.Linear(in_features=8*7*7, out_features=10)
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.pool1(x)
+        x = self.conv2(x)
+        x = self.pool2(x)
+        x = x.view(x.size(0), -1)
+        output = self.full_connected(x)
+        return output
+# 将模型添加到列表中
+CNN_kernel_size.append(CNN_ks3())
+CNN_kernel_size.append(CNN_ks5())
+CNN_kernel_size.append(CNN_ks7())
+CNN = []
+for i in range(3):
+    cnn = CNN_kernel_size[i]
+    CNN.append(cnn)
+train_loss_ks = []
+test_loss_ks = []
+for i in range(3):
+    cnn = CNN[i]
+    cuda_available = get_cuda_available()
+    if cuda_available==True:
+        cnn.cuda()
+    # 选择torch.optim.Adam作为模型参数的和优化函数，此外还有 SGD ，AdaGrad ，RMSProp等
+    # 实验表明，优化函数为SGD的模型迭代10次后平均精度为0.9875，优化函数为Adam的模型迭代10次后平均精度为0.9469
+    optimizer1 = torch.optim.Adam(cnn.parameters(), lr=LR)
+    # optimizer2 = torch.optim.SGD(cnn.parameters(), lr=LR)
+    # 损失函数选择交叉熵函数
+    loss_function = nn.CrossEntropyLoss()
+    # 加载训练集和测试集
+    train_loader = get_trainloader(BATCH_SIZE)
+    test_loader = get_testloader(BATCH_SIZE)
+    for ep in range(EPOCH):
+        startTick = time.perf_counter()
+        # 训练过程
+        for data in train_loader:
+            img, label = data
+            if cuda_available:
+                img = img.cuda()
+                label = label.cuda()
+            out = cnn(img)
+            # 得到误差
+            loss = loss_function(out, label)
+            train_loss_ks.append(loss.data.item())
+            # print("误差：", loss)
+            # 梯度归零
+            optimizer1.zero_grad()
+            # optimizer2.zero_grad()
+            # 反向传播误差，但是参数还没更新
+            loss.backward()
+            # 更新模型参数
+            optimizer1.step()
+            # optimizer2.step()
+        # 测试过程
+        num_correct = 0
+        # 预测正确样例数量
+        for data in test_loader:
+            img, label = data
+            if cuda_available:
+                img = img.cuda()
+                label = label.cuda()
+            # 获得输出
+            out = cnn(img)
+            loss = loss_function(out, label)
+            test_loss_ks.append(loss.data.item())
+            #
+            _, prediction = torch.max(out, 1)
+            # 预测正确的样本数量
+            num_correct += (prediction == label).sum()
+        # 精度=预测正确的样本数量/测试集样本数量
+        accuracy = format(num_correct.cpu().numpy() / get_test_data_len(), '0.4f')
+        # acc.append(float(accuracy))
+        timeSpan = time.perf_counter() - startTick
+        # print("迭代次数：", ep+1, "精度：", accuracy, "耗时：", timeSpan)
+    print("模型：", i + 1, "耗时：", timeSpan)
+plt.subplot(1, 2, 2)
+plt.plot(np.arange(1, 11, 1), test_loss_ks[0: 10], color='red', label="卷积核大小3*3")
+plt.plot(np.arange(1, 11, 1), test_loss_ks[10: 20], color='green', label="卷积核大小5*5")
+plt.plot(np.arange(1, 11, 1), test_loss_ks[20: 30], color='blue', label="卷积核大小7*7")
+plt.xlabel("迭代次数")
+plt.ylabel("测试损失值")
+plt.xticks(np.arange(1, 11, 1))
+plt.grid(b=True, linestyle='--')
+plt.legend(loc='upper right')
+plt.savefig('CNN_mnist_kernel_size.svg')
+plt.tight_layout
 plt.show()
