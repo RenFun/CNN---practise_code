@@ -1,10 +1,9 @@
-# Author: RenFun
-# File: CNN_mnist_batchsize.py
-# Time: 2022/01/05
+# Auther:RenFun
+# File:CNN_mnist_lossfunction.py
+# Time:2022/01/13
 
 
-# 使用不同BATCH_SIZE大小
-# 使用PyTorch搭建卷积神经网络模型，实现手写数字识别
+# 选择不同的损失函数
 import torch
 import torchvision
 from torch.utils.data import DataLoader
@@ -46,6 +45,17 @@ def get_trans():
     )
     return trans
 
+# 不进行预处理
+def get_trans_none():
+    trans = torchvision.transforms.Compose(
+        [
+            # 改变数据类型
+            torchvision.transforms.ToTensor(),
+            # 数据标准化
+            # torchvision.transforms.Normalize([0.5], [0.5])
+        ]
+    )
+    return trans
 
 # 加载数据集，并进行预处理
 train_data = torchvision.datasets.MNIST(
@@ -64,6 +74,22 @@ test_data = torchvision.datasets.MNIST(
 )
 
 
+# 加载未进行预处理的数据
+train_data_none = torchvision.datasets.MNIST(
+    root="./mnist",
+    # 是否是训练集
+    train=True,
+    # 调用get_trans()，对数据进行转换
+    transform=get_trans_none(),
+    download=True
+)
+test_data_none = torchvision.datasets.MNIST(
+    root="./mnist",
+    train=False,
+    transform=get_trans_none(),
+    download=True
+)
+
 # 得到测试集的规模
 def get_test_data_len():
     return len(test_data)
@@ -81,10 +107,17 @@ def get_testloader(BATCH_SIZE):
     return test_loader
 
 
-# 是否使用gpu
-# def get_cuda_available():
-#     available = torch.cuda.is_available()
-#     return available
+def get_trainloader_none(BATCH_SIZE):
+    # batch_size：一次训练所选取的样本数；shuffle：一代训练（epoch）中打乱数据
+    train_loader_none = DataLoader(train_data_none, batch_size=BATCH_SIZE, shuffle=True)
+    return train_loader_none
+
+
+def get_testloader_none(BATCH_SIZE):
+    test_loader_none = DataLoader(test_data_none, batch_size=BATCH_SIZE, shuffle=False)
+    return test_loader_none
+
+
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -142,9 +175,8 @@ class CNN(nn.Module):
 
 # 定义常量
 EPOCH = 20                              # 总的训练次数，即迭代次数
-# BATCH_SIZE = 128                        # 一批数据的规模，即一次训练选取的样本数量
+BATCH_SIZE = 128                        # 一批数据的规模，即一次训练选取的样本数量
 LR = 0.01                                # 学习率
-BATCHSIZE = [64, 128, 256]              # 设置不同大小的batchsize
 DOWNLOAD_MNIST = False                  # 运行代码时不需要下载数据集
 # 训练误差
 train_loss = []
@@ -152,82 +184,125 @@ train_loss = []
 accuracy = []
 # iteration次数
 iteration = 0
-for i in range(3):
-    # 实例化卷积神经网络
-    cnn = CNN()
-    cnn.to(DEVICE)
-    # torch.optim.选择优化函数，例如Adam，SGD ，AdaGrad ，RMSProp等
-    optimizer1 = torch.optim.SGD(cnn.parameters(), lr=LR)
-    # 损失函数选择交叉熵函数
-    loss_function = nn.CrossEntropyLoss()
-    # 加载训练集和测试集
-    train_loader = get_trainloader(BATCHSIZE[i])
-    test_loader = get_testloader(BATCHSIZE[i])
-    for epoch in range(EPOCH):
-        x = 0
-        print('epoch:', epoch+1)
-        # 训练过程
-        for data in train_loader:
-            img, label = data
-            img = img.to(DEVICE)
-            label = label.to(DEVICE)
-            out = cnn(img)
-            # 得到训练误差
-            loss = loss_function(out, label)
-            x += loss.data.item()
-            # train_loss.append(loss.data.item())
-            # print('训练损失值：', loss.data.item())
-            # 梯度归零
-            optimizer1.zero_grad()
-            # 反向传播误差，但是参数还没更新
-            loss.backward()                           # 如果出现数据类型错误，将loss.backward(torch.ones_like(loss))
-            # 更新模型参数
-            optimizer1.step()
-        train_loss.append(x/BATCHSIZE[i])
-        print('训练损失值：', x/BATCHSIZE[i])
-        # 测试CNN模型
-        num_correct = 0
-        for data in test_loader:
-            img, label = data
-            img = img.to(DEVICE)
-            label = label.to(DEVICE)
-            # 获得输出
-            out = cnn(img)
-            # 获得测试误差
-            loss = loss_function(out, label)
-            # 将tensor类型的loss2中的data取出，添加到列表中
-            # test_loss.append(loss.data.item())
-            _, prediction = torch.max(out, 1)
-            # 预测正确的样本数量
-            num_correct += (prediction == label).sum()
-            # 精度=预测正确的样本数量/测试集样本数量
-        acc = float(format(num_correct.cpu().numpy() / float(get_test_data_len()), '0.4f'))  # .cpu()是将参数迁移到cpu上来
-        # acc = float((prediction == label.data.cpu().numpy()).astype(int).sum()) / float(get_test_data_len.size(0))
-        accuracy.append(acc)
-        print('测试精度：', acc)
-# 绘制图像1：
+# 实例化卷积神经网络
+cnn = CNN()
+cnn.to(DEVICE)
+# 损失函数选择交叉熵函数
+loss_function1 = nn.CrossEntropyLoss()
+# 损失函数选择均方误差
+loss_function2 = nn.MSELoss(reduction=None)
+optimizer = torch.optim.SGD(cnn.parameters(), lr=LR)
+# 加载训练集和测试集
+train_loader = get_trainloader(BATCH_SIZE)
+test_loader = get_testloader(BATCH_SIZE)
+# 对使用交叉熵损失函数的模型进行训练
+for i in range(EPOCH):
+    x = 0
+    print('epoch:', i+1)
+    # 训练过程
+    for data in train_loader:
+        img, label = data
+        img = img.to(DEVICE)
+        label = label.to(DEVICE)
+        out = cnn(img)
+        # 得到训练误差
+        loss = loss_function1(out, label)
+        x += loss.data.item()
+        # train_loss.append(loss.data.item())
+        # print('训练损失值：', loss.data.item())
+        # 梯度归零
+        optimizer.zero_grad()
+        # 反向传播误差，但是参数还没更新
+        loss.backward()                           # 如果出现数据类型错误，将loss.backward(torch.ones_like(loss))
+        # 更新模型参数
+        optimizer.step()
+    train_loss.append(x/BATCH_SIZE)
+    print('训练损失值：', x/BATCH_SIZE)
+    num_correct = 0
+    for data in test_loader:
+        img, label = data
+        img = img.to(DEVICE)
+        label = label.to(DEVICE)
+        # 获得输出
+        out = cnn(img)
+        # 获得测试误差
+        loss = loss_function1(out, label)
+        # 将tensor类型的loss2中的data取出，添加到列表中
+        # test_loss.append(loss.data.item())
+        _, prediction = torch.max(out, 1)
+        # 预测正确的样本数量
+        num_correct += (prediction == label).sum()
+        # 精度=预测正确的样本数量/测试集样本数量
+    acc = float(format(num_correct.cpu().numpy() / float(get_test_data_len()), '0.4f'))  # .cpu()是将参数迁移到cpu上来
+    # acc = float((prediction == label.data.cpu().numpy()).astype(int).sum()) / float(get_test_data_len.size(0))
+    accuracy.append(acc)
+    print('测试精度：', acc)
+# 对使用均方误差的损失函数的模型进行训练
+for i in range(EPOCH):
+    x = 0
+    print('epoch:', i+1)
+    # 训练过程
+    for data in train_loader:
+        img, label = data
+        img = img.to(DEVICE)
+        label = label.to(DEVICE)
+        out = cnn(img)
+        # 得到训练误差
+        loss = loss_function2(out, label)
+        x += loss.data.item()
+        # train_loss.append(loss.data.item())
+        # print('训练损失值：', loss.data.item())
+        # 梯度归零
+        optimizer.zero_grad()
+        # 反向传播误差，但是参数还没更新
+        loss.backward()                           # 如果出现数据类型错误，将loss.backward(torch.ones_like(loss))
+        # 更新模型参数
+        optimizer.step()
+    train_loss.append(x/BATCH_SIZE)
+    print('训练损失值：', x/BATCH_SIZE)
+    num_correct = 0
+    for data in test_loader:
+        img, label = data
+        img = img.to(DEVICE)
+        label = label.to(DEVICE)
+        # 获得输出
+        out = cnn(img)
+        # 获得测试误差
+        loss = loss_function2(out, label)
+        # 将tensor类型的loss2中的data取出，添加到列表中
+        # test_loss.append(loss.data.item())
+        _, prediction = torch.max(out, 1)
+        # 预测正确的样本数量
+        num_correct += (prediction == label).sum()
+        # 精度=预测正确的样本数量/测试集样本数量
+    acc = float(format(num_correct.cpu().numpy() / float(get_test_data_len()), '0.4f'))  # .cpu()是将参数迁移到cpu上来
+    # acc = float((prediction == label.data.cpu().numpy()).astype(int).sum()) / float(get_test_data_len.size(0))
+    accuracy.append(acc)
+    print('测试精度：', acc)
+# 绘制图像1：训练集上的损失值
 plt.rcParams['font.sans-serif'] = ['SimHei']
 plt.rcParams['axes.unicode_minus'] = False
 plt.figure(figsize=(11, 5))
 plt.subplot(121)
-plt.plot(np.arange(1, 21), train_loss[0: 20], color='lightblue', label='BatchSize=64')
-plt.plot(np.arange(1, 21), train_loss[20: 40], color='royalblue', label='BatchSize=128')
-plt.plot(np.arange(1, 21), train_loss[40: 60], color='orange', label='BatchSize=256')
+plt.plot(np.arange(1, 21), train_loss[0: 20], color='lightblue', label='损失函数为交叉熵')
+plt.plot(np.arange(1, 21), train_loss[20: 40], color='royalblue', label='损失函数为均方误差')
 plt.xlabel("迭代次数")
 plt.ylabel("训练损失值")
 plt.xticks(np.arange(1, 21, 1))
 plt.grid(b=True, linestyle='--')
 plt.legend(loc='upper right')
-# plt.savefig('CNN_mnist_batchsize.svg', bbox_inches='tight')
+# plt.savefig('CNN_mnist_kernel_size_loss.svg', bbox_inches='tight')
 # plt.show()
+# 绘制图像2：测试集上的精度
 plt.subplot(122)
-plt.plot(np.arange(1, 21), accuracy[0: 20], color='lightblue', label='BatchSize=64')
-plt.plot(np.arange(1, 21), accuracy[20: 40], color='royalblue', label='BatchSize=128')
-plt.plot(np.arange(1, 21), accuracy[40: 60], color='orange', label='BatchSize=256')
+plt.plot(np.arange(1, 21), accuracy[0: 20], color='lightblue', label='损失函数为交叉熵')
+plt.plot(np.arange(1, 21), accuracy[20: 40], color='royalblue', label='损失函数为均方误差')
 plt.xlabel("迭代次数")
 plt.ylabel("精度")
 plt.xticks(np.arange(1, 21, 1))
 plt.grid(b=True, linestyle='--')
 plt.legend(loc='upper left')
-plt.savefig('CNN_mnist_batchsize_loss&accuracy.svg', bbox_inches='tight')
+# plt.savefig('CNN_mnist_kernel_size_acc.svg', bbox_inches='tight')
+# plt.savefig('CNN_mnist_lossfunction_loss&accuracy.svg', bbox_inches='tight')
 plt.show()
+

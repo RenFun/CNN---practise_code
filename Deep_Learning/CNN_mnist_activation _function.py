@@ -173,12 +173,12 @@ CNN_activation_function.append(CNN_ReLU())
 # 定义常量
 EPOCH = 24                              # 总的训练次数，即迭代次数
 BATCH_SIZE = 128                        # 一批数据的规模，即一次训练选取的样本数量
-LR = 0.2                                # 学习率
+LR = 0.01                                # 学习率
 DOWNLOAD_MNIST = False                  # 运行代码时不需要下载数据集
 epoch = 0
 # 训练误差
 train_loss = []
-
+accuracy = []
 for i in range(3):
     print('模型：', i + 1)
     cnn = CNN_activation_function[i]
@@ -210,12 +210,31 @@ for i in range(3):
             # 更新模型参数
             optimizer1.step()
         train_loss.append(x/BATCH_SIZE)
-        print( 'epoch次数：', epoch+1, '训练损失值：', x/BATCH_SIZE)
-
-
+        print('epoch次数：', epoch+1, '训练损失值：', x/BATCH_SIZE)
+        num_correct = 0
+        for data in test_loader:
+            img, label = data
+            img = img.to(DEVICE)
+            label = label.to(DEVICE)
+            # 获得输出
+            out = cnn(img)
+            # 获得测试误差
+            loss = loss_function(out, label)
+            # 将tensor类型的loss2中的data取出，添加到列表中
+            # test_loss.append(loss.data.item())
+            _, prediction = torch.max(out, 1)
+            # 预测正确的样本数量
+            num_correct += (prediction == label).sum()
+            # 精度=预测正确的样本数量/测试集样本数量
+        acc = float(format(num_correct.cpu().numpy() / float(get_test_data_len()), '0.4f'))  # .cpu()是将参数迁移到cpu上来
+        # acc = float((prediction == label.data.cpu().numpy()).astype(int).sum()) / float(get_test_data_len.size(0))
+        accuracy.append(acc)
+        print('测试精度：', acc)
 # 绘制图像
 plt.rcParams['font.sans-serif'] = ['SimHei']
 plt.rcParams['axes.unicode_minus'] = False
+plt.figure(figsize=(11, 5))
+plt.subplot(121)
 plt.plot(np.arange(1, 21), train_loss[4: 24], color='royalblue', label='激活函数sigmoid')
 plt.plot(np.arange(1, 21), train_loss[25: 45], color='lightblue', label='激活函数tanh')
 plt.plot(np.arange(1, 21), train_loss[48: 68], color='orange', label='激活函数ReLU')
@@ -224,5 +243,16 @@ plt.ylabel("训练损失值")
 plt.xticks(np.arange(1, 21, 1))
 plt.grid(b=True, linestyle='--')
 plt.legend(loc='upper right')
-plt.savefig('CNN_mnist_activation_function.svg', bbox_inches='tight')
+# plt.savefig('CNN_mnist_activation_function.svg', bbox_inches='tight')
+# plt.show()
+plt.subplot(122)
+plt.plot(np.arange(1, 21), accuracy[4: 24], color='royalblue', label='激活函数sigmoid')
+plt.plot(np.arange(1, 21), accuracy[25: 45], color='lightblue', label='激活函数tanh')
+plt.plot(np.arange(1, 21), accuracy[48: 68], color='orange', label='激活函数ReLU')
+plt.xlabel("迭代次数")
+plt.ylabel("精度")
+plt.xticks(np.arange(1, 21, 1))
+plt.grid(b=True, linestyle='--')
+plt.legend(loc='upper left')
+plt.savefig('CNN_mnist_activationfunction_loaa&accuracy.svg', bbox_inches='tight')
 plt.show()
