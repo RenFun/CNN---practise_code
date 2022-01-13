@@ -4,17 +4,17 @@
 
 
 # 测试卷积神经网络的超参数动态修改
-import torch
+import os
+import random
 import torchvision
+import torch
 from torch.utils.data import DataLoader
 import torch.nn as nn
 import matplotlib.pyplot as plt
 import numpy as np
-import os
-import random
 
 
-# 添加随机数种子
+# 添加随机数种子：为模型参数进行初始化
 def seed_everything(seed):
     random.seed(seed)
     np.random.seed(seed)
@@ -28,10 +28,10 @@ def seed_everything(seed):
     torch.backends.cudnn.benchmark = True
 
 
-seed_everything(2048)
+seed_everything(1024)
 
 
-# 转换函数：将数据转换到tensor类型，再归一化使其服从（0.5， 0.5）的正态分布
+# 数据预处理函数：将数据转换到tensor类型，再归一化使其服从（0.5， 0.5）的正态分布
 def get_trans():
     # torchvision.transforms:常用的图片变换，例如裁剪、旋转等
     # torchvision.transforms.Compose：主要作用是串联多个图片变换的操作
@@ -166,6 +166,8 @@ class CNN_ks7(nn.Module):
         x = x.view(x.size(0), -1)
         output = self.full_connected(x)
         return output
+
+
 # 将模型添加到列表中
 CNN_kernel_size.append(CNN_ks3())
 CNN_kernel_size.append(CNN_ks5())
@@ -173,12 +175,13 @@ CNN_kernel_size.append(CNN_ks7())
 # 定义常量
 EPOCH = 20                              # 总的训练次数，即迭代次数
 BATCH_SIZE = 128                        # 一批数据的规模，即一次训练选取的样本数量
-LR = 0.2                                # 学习率
+LR = 0.01                                # 学习率
 DOWNLOAD_MNIST = False                  # 运行代码时不需要下载数据集
 epoch = 0
 # 训练误差
 train_loss = []
-
+# 测试精度
+accuracy = []
 for i in range(3):
     print('模型：', i + 1)
     cnn = CNN_kernel_size[i]
@@ -209,12 +212,31 @@ for i in range(3):
             # 更新模型参数
             optimizer1.step()
         train_loss.append(x/BATCH_SIZE)
-        print( 'epoch次数：', epoch+1, '训练损失值：', x/BATCH_SIZE)
-
-
-# 绘制图像
+        print('epoch次数：', epoch+1, '训练损失值：', x/BATCH_SIZE)
+        num_correct = 0
+        for data in test_loader:
+            img, label = data
+            img = img.to(DEVICE)
+            label = label.to(DEVICE)
+            # 获得输出
+            out = cnn(img)
+            # 获得测试误差
+            loss = loss_function(out, label)
+            # 将tensor类型的loss2中的data取出，添加到列表中
+            # test_loss.append(loss.data.item())
+            _, prediction = torch.max(out, 1)
+            # 预测正确的样本数量
+            num_correct += (prediction == label).sum()
+            # 精度=预测正确的样本数量/测试集样本数量
+        acc = float(format(num_correct.cpu().numpy() / float(get_test_data_len()), '0.4f'))  # .cpu()是将参数迁移到cpu上来
+        # acc = float((prediction == label.data.cpu().numpy()).astype(int).sum()) / float(get_test_data_len.size(0))
+        accuracy.append(acc)
+        print('测试精度：', acc)
+# 绘制图像1：训练集上的损失值
 plt.rcParams['font.sans-serif'] = ['SimHei']
 plt.rcParams['axes.unicode_minus'] = False
+plt.figure(figsize=(11, 5))
+plt.subplot(121)
 plt.plot(np.arange(1, 21), train_loss[0: 20], color='lightblue', label='卷积核3*3')
 plt.plot(np.arange(1, 21), train_loss[20: 40], color='royalblue', label='卷积核5*5')
 plt.plot(np.arange(1, 21), train_loss[40: 60], color='orange', label='卷积核7*7')
@@ -223,5 +245,18 @@ plt.ylabel("训练损失值")
 plt.xticks(np.arange(1, 21, 1))
 plt.grid(b=True, linestyle='--')
 plt.legend(loc='upper right')
-plt.savefig('CNN_mnist_kernel_size.svg', bbox_inches='tight')
+# plt.savefig('CNN_mnist_kernel_size_loss.svg', bbox_inches='tight')
+# plt.show()
+# 绘制图像2：测试集上的精度
+plt.subplot(122)
+plt.plot(np.arange(1, 21), accuracy[0: 20], color='lightblue', label='卷积核3*3')
+plt.plot(np.arange(1, 21), accuracy[20: 40], color='royalblue', label='卷积核5*5')
+plt.plot(np.arange(1, 21), accuracy[40: 60], color='orange', label='卷积核7*7')
+plt.xlabel("迭代次数")
+plt.ylabel("精度")
+plt.xticks(np.arange(1, 21, 1))
+plt.grid(b=True, linestyle='--')
+plt.legend(loc='upper left')
+# plt.savefig('CNN_mnist_kernel_size_acc.svg', bbox_inches='tight')
+plt.savefig('CNN_mnist_kernelsize_loss&accuracy.svg', bbox_inches='tight')
 plt.show()

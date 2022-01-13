@@ -143,7 +143,7 @@ class CNN(nn.Module):
 # 定义常量
 EPOCH = 20                              # 总的训练次数，即迭代次数
 # BATCH_SIZE = 128                        # 一批数据的规模，即一次训练选取的样本数量
-LR = 0.2                                # 学习率
+LR = 0.01                                # 学习率
 BATCHSIZE = [64, 128, 256]              # 设置不同大小的batchsize
 DOWNLOAD_MNIST = False                  # 运行代码时不需要下载数据集
 # 训练误差
@@ -187,8 +187,8 @@ for i in range(3):
         print('训练损失值：', x/BATCHSIZE[i])
         # 测试CNN模型
         num_correct = 0
-        for data1 in test_loader:
-            img, label = data1
+        for data in test_loader:
+            img, label = data
             img = img.to(DEVICE)
             label = label.to(DEVICE)
             # 获得输出
@@ -208,6 +208,8 @@ for i in range(3):
 # 绘制图像1：
 plt.rcParams['font.sans-serif'] = ['SimHei']
 plt.rcParams['axes.unicode_minus'] = False
+plt.figure(figsize=(11, 5))
+plt.subplot(121)
 plt.plot(np.arange(1, 21), train_loss[0: 20], color='lightblue', label='BatchSize=64')
 plt.plot(np.arange(1, 21), train_loss[20: 40], color='royalblue', label='BatchSize=128')
 plt.plot(np.arange(1, 21), train_loss[40: 60], color='orange', label='BatchSize=256')
@@ -216,5 +218,16 @@ plt.ylabel("训练损失值")
 plt.xticks(np.arange(1, 21, 1))
 plt.grid(b=True, linestyle='--')
 plt.legend(loc='upper right')
-plt.savefig('CNN_mnist_batchsize.svg', bbox_inches='tight')
+# plt.savefig('CNN_mnist_batchsize.svg', bbox_inches='tight')
+# plt.show()
+plt.subplot(122)
+plt.plot(np.arange(1, 21), accuracy[0: 20], color='lightblue', label='BatchSize=64')
+plt.plot(np.arange(1, 21), accuracy[20: 40], color='royalblue', label='BatchSize=128')
+plt.plot(np.arange(1, 21), accuracy[40: 60], color='orange', label='BatchSize=256')
+plt.xlabel("迭代次数")
+plt.ylabel("精度")
+plt.xticks(np.arange(1, 21, 1))
+plt.grid(b=True, linestyle='--')
+plt.legend(loc='upper left')
+plt.savefig('CNN_mnist_batchsize_loss&accuracy.svg', bbox_inches='tight')
 plt.show()
